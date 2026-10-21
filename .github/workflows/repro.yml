@@ -4,17 +4,18 @@ on:
   push:
   workflow_dispatch:
 
-env:
-  ZIG_VERSION: 0.16.0
-
 jobs:
   repro:
+    name: repro (${{ matrix.os }}, zig ${{ matrix.zig }})
     runs-on: ${{ matrix.os }}
+    env:
+      ZIG_VERSION: ${{ matrix.zig }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
+        zig: [0.16.0, 0.17.0]
     steps:
       - uses: actions/checkout@v6
 
