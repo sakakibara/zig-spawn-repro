@@ -58,5 +58,10 @@ jobs:
           for i in 1 2 3; do
             echo "== round $i"
             rm -rf .zig-cache/o
-            zig build symptom -Dpairs=8 -Dsecs=75 --summary line 2>&1 | grep -E "failed to respond|timed out|Build Summary" || true
+            set +e
+            zig build symptom -Dpairs=8 -Dsecs=75 --summary line > out.txt 2>&1
+            echo "exit $?"
+            set -e
+            grep -E "failed to respond|timed out|error" out.txt || true
+            tail -3 out.txt
           done
