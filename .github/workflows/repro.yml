@@ -1,0 +1,62 @@
+name: repro
+
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  ZIG_VERSION: 0.16.0
+
+jobs:
+  repro:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: install zig (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          url="https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
+          mkdir -p "$HOME/zig"
+          curl -fsSL "$url" | tar -xJ -C "$HOME/zig"
+          echo "$HOME/zig/zig-x86_64-linux-${ZIG_VERSION}" >> "$GITHUB_PATH"
+
+      - name: install zig (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $url = "https://ziglang.org/download/$env:ZIG_VERSION/zig-x86_64-windows-$env:ZIG_VERSION.zip"
+          $dst = Join-Path $env:USERPROFILE 'zig'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Invoke-WebRequest -Uri $url -OutFile zig.zip
+          Expand-Archive -LiteralPath zig.zip -DestinationPath $dst
+          "$dst\zig-x86_64-windows-$env:ZIG_VERSION" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: build
+        run: zig build
+
+      - name: detector check (every run must be slow)
+        run: zig-out/bin/repro held 3
+
+      - name: control (no concurrent spawns)
+        run: zig-out/bin/repro control 300
+
+      - name: race (concurrent spawns), three rounds
+        shell: bash
+        run: |
+          for i in 1 2 3; do zig-out/bin/repro race 300; done
+
+      - name: build runner, three rounds
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            echo "== round $i"
+            rm -rf .zig-cache/o
+            zig build symptom -Dpairs=8 -Dsecs=75 --summary line 2>&1 | grep -E "failed to respond|timed out|Build Summary" || true
+          done
